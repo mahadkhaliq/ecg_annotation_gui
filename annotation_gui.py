@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
+from PyQt5.QtWidgets import QCheckBox
+from PyQt5.QtWidgets import QSizePolicy
+
 
 # Placeholder for ECG signal and time
 ecg_signal = np.array([])
@@ -18,9 +21,23 @@ segments = []
 all_segments = []
 all_labels = []
 
+
+wave_segments = []
+wave_labels = []
+heartbeat_segments = []
+heartbeat_labels = []
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Set size policies to ensure that the widgets do not stretch
+        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+
+
+
 
         self.setWindowTitle("Interactive Labeling with PyQt5 and Matplotlib")
         self.setGeometry(100, 100, 800, 600)
@@ -35,6 +52,8 @@ class App(QMainWindow):
         # Create a horizontal layout for buttons
         button_layout = QHBoxLayout()
 
+
+
         # Add "Next" and "Previous" buttons
         self.next_button = QPushButton("Next", self)
         self.next_button.clicked.connect(self.next_plot)
@@ -48,6 +67,8 @@ class App(QMainWindow):
         self.interval_dropdown = QComboBox(self)
         self.interval_dropdown.addItems([str(x) for x in range(200, 5100, 200)])
         button_layout.addWidget(self.interval_dropdown)
+
+
 
         # Create buttons and add to layout
         buttons = {
@@ -80,6 +101,32 @@ class App(QMainWindow):
         self.dropdown_classification.addItems(["Normal", "Abnormal"])
         main_layout.addWidget(self.dropdown_classification)
 
+        # Create checkboxes for 'Wave' and 'Heartbeat'
+        self.wave_checkbox = QCheckBox('Wave', self)
+        self.heartbeat_checkbox = QCheckBox('Heartbeat', self)
+
+        # Connect checkboxes to enable/disable dropdowns
+        self.wave_checkbox.stateChanged.connect(self.toggle_wave_dropdown)
+        self.heartbeat_checkbox.stateChanged.connect(self.toggle_heartbeat_dropdown)
+
+        # Create a horizontal layout for the 'Wave' checkbox and its corresponding dropdown
+        wave_layout = QHBoxLayout()
+        wave_layout.addWidget(self.dropdown)
+        wave_layout.addWidget(self.wave_checkbox)  # Using the dropdown you originally defined
+
+        # Create a horizontal layout for the 'Heartbeat' checkbox and its corresponding dropdown
+        heartbeat_layout = QHBoxLayout()
+        heartbeat_layout.addWidget(self.dropdown_classification)
+        heartbeat_layout.addWidget(self.heartbeat_checkbox)  # Using the dropdown you originally defined
+
+        # Add these layouts to the main layout
+        main_layout.addLayout(wave_layout)
+        main_layout.addLayout(heartbeat_layout)
+
+        # Disable both dropdowns by default
+        self.dropdown.setEnabled(True)
+        self.dropdown_classification.setEnabled(False)
+
 
         # Apply the layout to the central widget
         central_widget.setLayout(main_layout)
@@ -100,6 +147,16 @@ class App(QMainWindow):
             global ecg_signal, time_ms
             ecg_signal = np.array(df[2])
             time_ms = np.array(df['time_ms'])
+
+    def toggle_wave_dropdown(self, state):
+        self.dropdown.setEnabled(bool(state))
+        if state:
+            self.heartbeat_checkbox.setChecked(False)
+    def toggle_heartbeat_dropdown(self, state):
+        self.dropdown_classification.setEnabled(bool(state))
+        if state:
+            self.wave_checkbox.setChecked(False)
+
 
     def start(self):
         global ecg_signal
@@ -184,20 +241,50 @@ class App(QMainWindow):
             self.canvas.ax.yaxis.set_major_locator(ticker.MultipleLocator(1000))  # arbitrary Y-axis interval
             self.canvas.ax.yaxis.set_minor_locator(ticker.MultipleLocator(200))
 
-            self.canvas.ax.set_ylim([-2000, 1500])
+            self.canvas.ax.set_ylim([-2500, 1500])
             self.canvas.mpl_connect('button_press_event', self.onclick)
 
-            # Draw saved segments if they are in the current view
-            for (start_time, end_time), label in zip(all_segments, all_labels):
-                if start_time >= time_segment[0] and end_time <= time_segment[-1]:
-                    self.canvas.ax.axvspan(start_time, end_time, facecolor='g', alpha=0.5)
-                    mid_point = (start_time + end_time) / 2
-                    self.canvas.ax.text(mid_point, self.canvas.ax.get_ylim()[1] * 0.9, label,
-                                        horizontalalignment='center', verticalalignment='center',
-                                        fontsize=12, color='red')
 
-            self.canvas.draw()
+        # Draw saved segments for 'Wave' if they are in the current view
+        for (start_time, end_time), label in zip(wave_segments, wave_labels):
+            if start_time >= time_segment[0] and end_time <= time_segment[-1]:
+                self.canvas.ax.axvspan(start_time, end_time, facecolor='b', alpha=0.5)
+                mid_point = (start_time + end_time) / 2
+                self.canvas.ax.text(mid_point, self.canvas.ax.get_ylim()[1] * 0.9, label,
+                                    horizontalalignment='center', verticalalignment='center',
+                                    fontsize=12, color='red')
 
+        # Draw saved segments for 'Heartbeat' if they are in the current view
+        for (start_time, end_time), label in zip(heartbeat_segments, heartbeat_labels):
+            if start_time >= time_segment[0] and end_time <= time_segment[-1]:
+                self.canvas.ax.axvspan(start_time, end_time, facecolor='g', alpha=0.5)  # Changed color to green for differentiation
+                mid_point = (start_time + end_time) / 2
+                self.canvas.ax.text(mid_point, self.canvas.ax.get_ylim()[1] * 0.8, label,  # Changed vertical alignment for differentiation
+                                    horizontalalignment='center', verticalalignment='center',
+                                    fontsize=12, color='blue')  # Changed color to blue for differentiation
+
+        self.canvas.draw()
+
+    # def onclick(self, event):
+    #     ix = event.xdata
+    #     if ix is not None:
+    #         ix_adjusted = int(ix)
+    #         segments.append(ix_adjusted)
+    #         if len(segments) % 2 == 0:
+    #             self.canvas.ax.axvspan(segments[-2], segments[-1], facecolor='g', alpha=0.5)
+    #             current_label = self.dropdown.currentText()
+    #             mid_point = (segments[-1] + segments[-2]) / 2
+    #             self.canvas.ax.text(mid_point, self.canvas.ax.get_ylim()[1] * 0.9, current_label,
+    #                                 horizontalalignment='center', verticalalignment='center',
+    #                                 fontsize=12, color='red')
+    #             self.canvas.draw()
+    #
+    #             # Append the segment and its label to all_segments and all_labels
+    #             all_segments.append((segments[-2], segments[-1]))
+    #             all_labels.append(current_label)
+    #
+    #             # Print current segments and their labels
+    #             print(f"Current segments and labels: {list(zip(all_segments, all_labels))}")
 
     def onclick(self, event):
         ix = event.xdata
@@ -205,21 +292,45 @@ class App(QMainWindow):
             ix_adjusted = int(ix)
             segments.append(ix_adjusted)
             if len(segments) % 2 == 0:
-                self.canvas.ax.axvspan(segments[-2], segments[-1], facecolor='g', alpha=0.5)
-                current_label = self.dropdown.currentText()
+                # Check which checkbox is ticked and append to the respective list
+                if self.wave_checkbox.isChecked():
+                    self.canvas.ax.axvspan(segments[-2], segments[-1], facecolor='b', alpha=0.3)
+                    current_label = self.dropdown.currentText()
+                    wave_segments.append((segments[-2], segments[-1]))
+                    wave_labels.append(current_label)
+                elif self.heartbeat_checkbox.isChecked():
+                    self.canvas.ax.axvspan(segments[-2], segments[-1], facecolor='g', alpha=0.3)
+                    current_label = self.dropdown_classification.currentText()
+                    heartbeat_segments.append((segments[-2], segments[-1]))
+                    heartbeat_labels.append(current_label)
+
                 mid_point = (segments[-1] + segments[-2]) / 2
                 self.canvas.ax.text(mid_point, self.canvas.ax.get_ylim()[1] * 0.9, current_label,
                                     horizontalalignment='center', verticalalignment='center',
                                     fontsize=12, color='red')
                 self.canvas.draw()
 
-                # Append the segment and its label to all_segments and all_labels
-                all_segments.append((segments[-2], segments[-1]))
-                all_labels.append(current_label)
-
-                # Print current segments and their labels
-                print(f"Current segments and labels: {list(zip(all_segments, all_labels))}")
-
+    # def save(self):
+    #     global ecg_signal, time_ms
+    #     options = QFileDialog.Options()
+    #     filePath, _ = QFileDialog.getSaveFileName(self, "Save File", "", "CSV Files (*.csv);;All Files (*)", options=options)
+    #     if filePath:
+    #         # Your existing save code here
+    #         if 'df' not in globals():
+    #             global df
+    #             df = pd.DataFrame({'time_ms': time_ms, 'ecg_signal': ecg_signal})
+    #
+    #         df['beats'] = np.nan
+    #
+    #         for segment, label in zip(all_segments, all_labels):
+    #             start_time, end_time = segment
+    #             df.loc[(df['time_ms'] >= start_time) & (df['time_ms'] <= end_time), 'beats'] = label  # Using the first letter of the label and converting to lowercase
+    #
+    #         if not filePath.endswith('.csv'):
+    #             filePath += '.csv'
+    #
+    #         df.to_csv(filePath, index=False)
+    #         print(f"Annotations saved to {filePath}.")
 
     def save(self):
         global ecg_signal, time_ms
@@ -232,10 +343,18 @@ class App(QMainWindow):
                 df = pd.DataFrame({'time_ms': time_ms, 'ecg_signal': ecg_signal})
 
             df['beats'] = np.nan
+            df['heartbeat'] = np.nan  # Added new column for 'Heartbeat'
 
-            for segment, label in zip(all_segments, all_labels):
+            # For 'beats'
+            for segment, label in zip(wave_segments, wave_labels):
                 start_time, end_time = segment
-                df.loc[(df['time_ms'] >= start_time) & (df['time_ms'] <= end_time), 'beats'] = label  # Using the first letter of the label and converting to lowercase
+                df.loc[(df['time_ms'] >= start_time) & (df['time_ms'] <= end_time), 'beats'] = label
+
+            # For 'heartbeat'
+            for segment, label in zip(heartbeat_segments, heartbeat_labels):
+                start_time, end_time = segment
+                df.loc[(df['time_ms'] >= start_time) & (df['time_ms'] <= end_time), 'heartbeat'] = label
+
 
             if not filePath.endswith('.csv'):
                 filePath += '.csv'
@@ -245,11 +364,11 @@ class App(QMainWindow):
 
 
     def close_plot(self):
-        self.canvas.ax.clear()
-        self.canvas.draw()
+            self.canvas.ax.clear()
+            self.canvas.draw()
 
     def exit_app(self):
-        sys.exit()
+            sys.exit()
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
